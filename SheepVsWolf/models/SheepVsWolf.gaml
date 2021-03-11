@@ -1,7 +1,7 @@
 model prey_predator
 
 global {
-    int nb_preys_init <- 200; // 200
+    int nb_preys_init <- 10; // 200
     int nb_predators_init <- 0; // 20
     float prey_max_energy <- 1.0;
     float prey_max_transfert <- 0.1;
@@ -80,7 +80,7 @@ species generic_species {
         do die;
     }
 
-    reflex reproduce when: (energy >= energy_reproduce) and (flip(proba_reproduce)) {
+    reflex reproduce when: (energy >= energy_reproduce) and (flip(proba_reproduce)) and (my_cell.neighbors2 first_with (!(empty (prey inside (each))))) { // TODO: Move to specialed speices 
         int nb_offsprings <- rnd(1, nb_max_offsprings);
         create species(self) number: nb_offsprings {
             my_cell <- myself.my_cell;
