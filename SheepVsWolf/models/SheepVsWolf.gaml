@@ -15,13 +15,33 @@ global {
     float predator_proba_reproduce <- 0.01;
     int predator_nb_max_offsprings <- 3;
     float predator_energy_reproduce <- 0.5;
+    file map_init <- image_file("../includes/raster_map.png");
     int nb_preys -> {length(prey)};
     int nb_predators -> {length(predator)};
 
     init {
         create prey number: nb_preys_init;
         create predator number: nb_predators_init;
+        ask vegetation_cell {
+    		color <- rgb (map_init at {grid_x,grid_y}) ;
+    		food <- 1 - (((color as list) at 0) / 255) ;
+    		food_prod <- food / 100 ; 
+    	}
     }
+    
+    reflex stop_simulation when: (nb_preys = 0) or (nb_predators = 0) {
+        do pause ;
+    } 
+    
+    reflex save_result when: (nb_preys > 0) and (nb_predators > 0){
+    save ("cycle: "+ cycle + "; nbPreys: " + nb_preys
+      + "; minEnergyPreys: " + (prey min_of each.energy)
+      + "; maxSizePreys: " + (prey max_of each.energy) 
+      + "; nbPredators: " + nb_predators           
+      + "; minEnergyPredators: " + (predator min_of each.energy)          
+      + "; maxSizePredators: " + (predator max_of each.energy)) 
+      to: "results.txt" type: "text" ;
+}
 }
 
 species generic_species {
@@ -33,6 +53,7 @@ species generic_species {
     float proba_reproduce;
     int nb_max_offsprings;
     float energy_reproduce;
+    image_file my_icon;
     vegetation_cell my_cell <- one_of(vegetation_cell);
     float energy <- rnd(max_energy) update: energy - energy_consum max: max_energy;
 
@@ -41,12 +62,16 @@ species generic_species {
     }
 
     reflex basic_move {
-        my_cell <- one_of(my_cell.neighbors2);
+        my_cell <- choose_cell();
         location <- my_cell.location;
     }
+    
+    vegetation_cell choose_cell {
+    	return nil;
+    } 
 
     reflex eat {
-        energy <- energy + energy_from_eat();
+        energy <- energy + energy_from_eat();        
     }
 
     reflex die when: energy <= 0 {
@@ -71,9 +96,18 @@ species generic_species {
     aspect base {
         draw circle(size) color: color;
     }
+
+    aspect icon {
+        draw my_icon size: 2 * size;
+    }
+
+    aspect info {
+        draw square(size) color: color;
+        draw string(energy with_precision 2) size: 3 color: #black;
+    }
 }
 
-species prey parent: generic_species {
+species prey parent: generic_species { // Sheep
     rgb color <- #blue;
     float max_energy <- prey_max_energy;
     float max_transfert <- prey_max_transfert;
@@ -81,6 +115,7 @@ species prey parent: generic_species {
     float proba_reproduce <- prey_proba_reproduce;
     int nb_max_offsprings <- prey_nb_max_offsprings;
     float energy_reproduce <- prey_energy_reproduce;
+    image_file my_icon <- image_file("../includes/sheep.png");
 
     float energy_from_eat {
         float energy_transfert <- 0.0;
@@ -90,9 +125,13 @@ species prey parent: generic_species {
         }             
         return energy_transfert;
     }
+    
+    vegetation_cell choose_cell { // Chooses the cell within one which is most juicy.
+        return (my_cell.neighbors2) with_max_of (each.food);
+    }
 }
 
-species predator parent: generic_species {
+species predator parent: generic_species { // Wolf
     rgb color <- #red;
     float max_energy <- predator_max_energy;
     float energy_transfert <- predator_energy_transfert;
@@ -100,6 +139,16 @@ species predator parent: generic_species {
     float proba_reproduce <- predator_proba_reproduce;
     int nb_max_offsprings <- predator_nb_max_offsprings;
     float energy_reproduce <- predator_energy_reproduce;
+    image_file my_icon <- image_file("../includes/wolf.png");
+    
+    vegetation_cell choose_cell {
+        vegetation_cell my_cell_tmp <- shuffle(my_cell.neighbors2) first_with (!(empty (prey inside (each))));
+    if my_cell_tmp != nil { // If a prey is nearby
+        return my_cell_tmp;
+    } else { // If no prey is nearby
+        return one_of (my_cell.neighbors2);
+    } 
+    }
 
     float energy_from_eat {
         list<prey> reachable_preys <- prey inside (my_cell);
@@ -140,8 +189,33 @@ experiment prey_predator type: gui {
     output {
         display main_display {
             grid vegetation_cell lines: #black;
-            species prey aspect: base;
-            species predator aspect: base;
+            species prey aspect: icon;
+            species predator aspect: icon;
+        }
+
+//        display info_display {
+//            grid vegetation_cell lines: #black;
+//            species prey aspect: info;
+//            species predator aspect: info;
+//        }
+
+        display Population_information refresh: every(5#cycles) {
+            chart "Species evolution" type: series size: {1,0.5} position: {0, 0} {
+                data "number_of_preys" value: nb_preys color: #blue;
+                data "number_of_predator" value: nb_predators color: #red;
+            }
+            chart "Prey Energy Distribution" type: histogram background: #lightgray size: {0.5,0.5} position: {0, 0.5} {
+                data "]0;0.25]" value: prey count (each.energy <= 0.25) color:#blue;
+                data "]0.25;0.5]" value: prey count ((each.energy > 0.25) and (each.energy <= 0.5)) color:#blue;
+                data "]0.5;0.75]" value: prey count ((each.energy > 0.5) and (each.energy <= 0.75)) color:#blue;
+                data "]0.75;1]" value: prey count (each.energy > 0.75) color:#blue;
+            }
+            chart "Predator Energy Distribution" type: histogram background: #lightgray size: {0.5,0.5} position: {0.5, 0.5} {
+                data "]0;0.25]" value: predator count (each.energy <= 0.25) color: #red;
+                data "]0.25;0.5]" value: predator count ((each.energy > 0.25) and (each.energy <= 0.5)) color: #red;
+                data "]0.5;0.75]" value: predator count ((each.energy > 0.5) and (each.energy <= 0.75)) color: #red;
+                data "]0.75;1]" value: predator count (each.energy > 0.75) color: #red;
+            }
         }
 
         monitor "Number of preys" value: nb_preys;
