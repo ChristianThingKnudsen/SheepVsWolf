@@ -1,15 +1,17 @@
 model prey_predator
 
 global {
-    int nb_preys_init <- 200;
-    int nb_predators_init <- 20;
+    int nb_preys_init <- 200; // 200
+    int nb_predators_init <- 0; // 20
     float prey_max_energy <- 1.0;
     float prey_max_transfert <- 0.1;
     float prey_energy_consum <- 0.05;
+    float prey_energy_grazing <- 0.01; //0.1
+    float prey_energy_wandering <- 0.05; //0.2
     float predator_max_energy <- 1.0;
     float predator_energy_transfert <- 0.5;
     float predator_energy_consum <- 0.02;
-    float prey_proba_reproduce <- 0.01;
+    float prey_proba_reproduce <- 0.01; //0.01
     int prey_nb_max_offsprings <- 5;
     float prey_energy_reproduce <- 0.5;
     float predator_proba_reproduce <- 0.01;
@@ -29,9 +31,9 @@ global {
     	}
     }
     
-    reflex stop_simulation when: (nb_preys = 0) or (nb_predators = 0) {
-        do pause ;
-    } 
+//    reflex stop_simulation when: (nb_preys = 0) or (nb_predators = 0) {
+//        do pause ;
+//    } 
     
     reflex save_result when: (nb_preys > 0) and (nb_predators > 0){
     save ("cycle: "+ cycle + "; nbPreys: " + nb_preys
@@ -86,7 +88,7 @@ species generic_species {
             energy <- myself.energy / nb_offsprings;
         }
 
-        energy <- energy / nb_offsprings;
+        energy <- energy-energy_reproduce; // Energy consumption for reproduction
     }
 
     float energy_from_eat {
@@ -126,8 +128,16 @@ species prey parent: generic_species { // Sheep
         return energy_transfert;
     }
     
-    vegetation_cell choose_cell { // Chooses the cell within one which is most juicy.
-        return (my_cell.neighbors2) with_max_of (each.food);
+    vegetation_cell choose_cell { // Chooses the cell within one which is most juicy within one.
+    	vegetation_cell best_neighbor <- ((my_cell.neighbors2) with_max_of (each.food)); // Most juicy neighbor
+    	if best_neighbor.food>my_cell.food { // Walk one cell
+    		energy_consum <- prey_energy_wandering;
+    		return best_neighbor;
+    	}
+    	else { // Stay
+    		energy_consum <- prey_energy_grazing;
+    		return my_cell;
+    	}
     }
 }
 
