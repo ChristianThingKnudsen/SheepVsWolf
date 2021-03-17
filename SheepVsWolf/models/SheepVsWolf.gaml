@@ -1,8 +1,8 @@
 model prey_predator
 
 global {
-    int nb_preys_init <- 20; // 200
-    int nb_predators_init <- 10; // 20
+    int nb_preys_init <- 200; // 200
+    int nb_predators_init <- 20; // 20
     float prey_max_energy <- 1.0;
     float prey_max_transfert <- 0.1;
     float prey_energy_consum <- 0.05;
@@ -10,7 +10,9 @@ global {
     float prey_energy_wandering <- 0.05; //0.2
     float predator_max_energy <- 1.0;
     float predator_energy_transfert <- 0.5;
-    float predator_energy_consum <- 0.02;
+    float predator_energy_wandering <- 0.02; //0.2
+    float predator_energy_sprint <- 0.25;
+    float predator_energy_standing <- 0.01;
     float prey_proba_reproduce <- 0.01; //0.01
     int prey_nb_max_offsprings <- 5;
     float prey_energy_reproduce <- 0.5;
@@ -160,18 +162,54 @@ species predator parent: generic_species { // Wolf
     rgb color <- #red;
     float max_energy <- predator_max_energy;
     float energy_transfert <- predator_energy_transfert;
-    float energy_consum <- predator_energy_consum;
+    float energy_consum <- predator_energy_wandering;
     float proba_reproduce <- predator_proba_reproduce;
     int nb_max_offsprings <- predator_nb_max_offsprings;
     float energy_reproduce <- predator_energy_reproduce;
     image_file my_icon <- image_file("../includes/wolf.png");
     
     vegetation_cell choose_cell {
-        vegetation_cell my_cell_tmp <- shuffle(my_cell.neighbors1) first_with (!(empty (prey inside (each))));
-    if my_cell_tmp != nil { // If a prey is nearby
-        return my_cell_tmp;
-    } else { // If no prey is nearby
-        return one_of (my_cell.neighbors1);
+        vegetation_cell my_cell_tmp <- shuffle(my_cell.neighbors2) first_with (!(empty (prey inside (each))));
+    if my_cell_tmp != nil { // Sprinting
+    	energy_consum <- predator_energy_sprint;
+        return my_cell_tmp; // Sprint to prey
+    } else { // Wandering
+    vegetation_cell my_cell_smell;
+    	if (energy >= energy_reproduce){
+    		my_cell_smell <- shuffle(my_cell.neighbors6) first_with (!(empty (predator inside (each)))); // Setting smell to partner
+    	} 
+    	
+    	if my_cell_smell != nil{   
+    		energy_consum <- predator_energy_wandering; 		
+    		return my_cell.neighbors1 closest_to my_cell_smell; // Find partner
+    		
+    	} else {
+    		my_cell_smell <- shuffle(my_cell.neighbors6) first_with (!(empty (prey inside (each)))); // Setting smell to prey
+    	} 
+    	
+    	if my_cell_smell != nil{    	
+    		energy_consum <- predator_energy_wandering;	
+    		return my_cell.neighbors1 closest_to my_cell_smell; // Find prey
+    		
+    	}
+    	
+    	vegetation_cell my_cell_vision <- ((my_cell.neighbors2) with_max_of (each.food));
+    	if my_cell_vision.food > my_cell.food { // Walk one cell
+    		energy_consum <- predator_energy_wandering;
+    		if my_cell.neighbors1 contains my_cell_vision {    			
+    			return my_cell_vision; // Walk to juicy grass
+    		}    			
+    		return my_cell.neighbors1 closest_to my_cell_vision; // Find juicy grass
+    	} else {    		
+    		if my_cell.food = my_cell_vision.food{
+    			energy_consum <- predator_energy_wandering;
+        		return one_of (my_cell.neighbors1); // Wander around
+    		} 
+    		energy_consum <- predator_energy_standing;
+    		return my_cell; // Stay at juicy grass    	
+    	} 
+    	
+    	
     } 
     }
 
@@ -207,6 +245,7 @@ grid vegetation_cell width: 50 height: 50 neighbors: 8 {
     list<vegetation_cell> neighbors2 <- (self neighbors_at 2);
     list<vegetation_cell> neighbors3 <- (self neighbors_at 3);
     list<vegetation_cell> neighbors4 <- (self neighbors_at 4);
+    list<vegetation_cell> neighbors6 <- (self neighbors_at 6);
     
 }
 
@@ -218,7 +257,7 @@ experiment prey_predator type: gui {
     parameter "Initial number of predators: " var: nb_predators_init min: 0 max: 200 category: "Predator";
     parameter "Predator max energy: " var: predator_max_energy category: "Predator";
     parameter "Predator energy transfert: " var: predator_energy_transfert category: "Predator";
-    parameter "Predator energy consumption: " var: predator_energy_consum category: "Predator";
+    parameter "Predator energy consumption: " var: predator_energy_wandering category: "Predator";
     parameter 'Prey probability reproduce: ' var: prey_proba_reproduce category: 'Prey';
     parameter 'Prey nb max offsprings: ' var: prey_nb_max_offsprings category: 'Prey';
     parameter 'Prey energy reproduce: ' var: prey_energy_reproduce category: 'Prey';
@@ -233,11 +272,11 @@ experiment prey_predator type: gui {
             species predator aspect: icon;
         }
 
-//        display info_display {
-//            grid vegetation_cell lines: #black;
-//            species prey aspect: info;
-//            species predator aspect: info;
-//        }
+        display info_display {
+            grid vegetation_cell lines: #black;
+            species prey aspect: info;
+            species predator aspect: info;
+        }
 
         display Population_information refresh: every(5#cycles) {
             chart "Species evolution" type: series size: {1,0.5} position: {0, 0} {
