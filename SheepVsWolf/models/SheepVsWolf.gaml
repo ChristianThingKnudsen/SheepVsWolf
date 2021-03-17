@@ -1,8 +1,8 @@
 model prey_predator
 
 global {
-    int nb_preys_init <- 10; // 200
-    int nb_predators_init <- 0; // 20
+    int nb_preys_init <- 20; // 200
+    int nb_predators_init <- 10; // 20
     float prey_max_energy <- 1.0;
     float prey_max_transfert <- 0.1;
     float prey_energy_consum <- 0.05;
@@ -14,7 +14,7 @@ global {
     float prey_proba_reproduce <- 0.01; //0.01
     int prey_nb_max_offsprings <- 5;
     float prey_energy_reproduce <- 0.5;
-    float predator_proba_reproduce <- 0.01;
+    float predator_proba_reproduce <- 0.01; //0.01
     int predator_nb_max_offsprings <- 3;
     float predator_energy_reproduce <- 0.5;
     file map_init <- image_file("../includes/raster_map.png");
@@ -80,15 +80,9 @@ species generic_species {
         do die;
     }
 
-    reflex reproduce when: (energy >= energy_reproduce) and (flip(proba_reproduce)) and (my_cell.neighbors2 first_with (!(empty (prey inside (each))))) { // TODO: Move to specialed speices 
-        int nb_offsprings <- rnd(1, nb_max_offsprings);
-        create species(self) number: nb_offsprings {
-            my_cell <- myself.my_cell;
-            location <- my_cell.location;
-            energy <- myself.energy / nb_offsprings;
-        }
-
-        energy <- energy-energy_reproduce; // Energy consumption for reproduction
+    reflex reproduce { 
+        return nil;
+        
     }
 
     float energy_from_eat {
@@ -129,7 +123,15 @@ species prey parent: generic_species { // Sheep
     }
     
     vegetation_cell choose_cell { // Chooses the cell within one which is most juicy within one.
-    	vegetation_cell best_neighbor <- ((my_cell.neighbors2) with_max_of (each.food)); // Most juicy neighbor
+        	
+    	vegetation_cell danger_zone <- (my_cell.neighbors2 first_with (!(empty (predator inside (each)))));
+    	if (my_cell.neighbors2 contains danger_zone){ // Returns nil if no predator is near, otherwise it returns a cell
+    		
+    		return one_of (my_cell.neighbors3-my_cell.neighbors2); // Flee
+    	}
+    	
+    	vegetation_cell best_neighbor <- ((my_cell.neighbors1) with_max_of (each.food)); // Most juicy neighbor   	
+    	
     	if best_neighbor.food>my_cell.food { // Walk one cell
     		energy_consum <- prey_energy_wandering;
     		return best_neighbor;
@@ -139,6 +141,19 @@ species prey parent: generic_species { // Sheep
     		return my_cell;
     	}
     }
+    
+    reflex reproduce when: (energy >= energy_reproduce) and (flip(proba_reproduce)) and (my_cell.neighbors1 first_with (!(empty (prey inside (each))))) { 
+        int nb_offsprings <- rnd(1, nb_max_offsprings);
+        create species(self) number: nb_offsprings {
+            my_cell <- myself.my_cell;
+            location <- my_cell.location;
+            energy <- myself.energy / nb_offsprings;
+        }
+
+        energy <- energy-energy_reproduce; // Energy consumption for reproduction
+    }
+    
+    
 }
 
 species predator parent: generic_species { // Wolf
@@ -152,11 +167,11 @@ species predator parent: generic_species { // Wolf
     image_file my_icon <- image_file("../includes/wolf.png");
     
     vegetation_cell choose_cell {
-        vegetation_cell my_cell_tmp <- shuffle(my_cell.neighbors2) first_with (!(empty (prey inside (each))));
+        vegetation_cell my_cell_tmp <- shuffle(my_cell.neighbors1) first_with (!(empty (prey inside (each))));
     if my_cell_tmp != nil { // If a prey is nearby
         return my_cell_tmp;
     } else { // If no prey is nearby
-        return one_of (my_cell.neighbors2);
+        return one_of (my_cell.neighbors1);
     } 
     }
 
@@ -170,14 +185,29 @@ species predator parent: generic_species { // Wolf
         }
         return 0.0;
     }
+    
+    reflex reproduce when: (energy >= energy_reproduce) and (flip(proba_reproduce)) and (my_cell.neighbors1 first_with (!(empty (predator inside (each))))) { 
+        int nb_offsprings <- rnd(1, nb_max_offsprings);
+        create species(self) number: nb_offsprings {
+            my_cell <- myself.my_cell;
+            location <- my_cell.location;
+            energy <- myself.energy / nb_offsprings;
+        }
+
+        energy <- energy-energy_reproduce; // Energy consumption for reproduction
+    }
 }
 
-grid vegetation_cell width: 50 height: 50 neighbors: 4 {
+grid vegetation_cell width: 50 height: 50 neighbors: 8 {
     float max_food <- 1.0;
     float food_prod <- rnd(0.01);
     float food <- rnd(1.0) max: max_food update: food + food_prod;
     rgb color <- rgb(int(255 * (1 - food)), 255, int(255 * (1 - food))) update: rgb(int(255 * (1 - food)), 255, int(255 * (1 - food)));
+    list<vegetation_cell> neighbors1 <- (self neighbors_at 1);
     list<vegetation_cell> neighbors2 <- (self neighbors_at 2);
+    list<vegetation_cell> neighbors3 <- (self neighbors_at 3);
+    list<vegetation_cell> neighbors4 <- (self neighbors_at 4);
+    
 }
 
 experiment prey_predator type: gui {
